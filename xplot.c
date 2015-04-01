@@ -956,7 +956,7 @@ void display_plotter(PLOTTER pl)
 	    if ( i < 0 )
 	      {
 		fprintf(stderr, "XAllocNamedColor failed for %s: %d\n",
-			ColorNames[i], i);
+			ColorNames[ci], i);
 		break;
 	      }
 
@@ -1256,19 +1256,20 @@ void draw_pointer_marks(PLOTTER pl, GC gc)
 
   if (pl->win == 0) return;
 
+/*
   XDrawLine(pl->dpy, pl->win, gc,
 	    pl->pointer_marks.x, pl->origin.y + pl->size.y - 1,
 	    pl->pointer_marks.x, pl->origin.y + pl->size.y - 1 - x_pm_l);
   XDrawLine(pl->dpy, pl->win, gc,
 	    pl->origin.x, pl->pointer_marks.y,
 	    pl->origin.x + x_pm_l, pl->pointer_marks.y);
-
   XDrawLine(pl->dpy, pl->win, gc,
 	    pl->pointer_marks.x - x_pm_l, pl->pointer_marks.y,
 	    pl->pointer_marks.x + x_pm_l, pl->pointer_marks.y);
   XDrawLine(pl->dpy, pl->win, gc,
 	    pl->pointer_marks.x, pl->pointer_marks.y - x_pm_l,
 	    pl->pointer_marks.x, pl->pointer_marks.y + x_pm_l);
+*/
 
   switch (pl->state == SLAVE? pl->master_state : pl->state) {
   case ZOOM:
@@ -1297,6 +1298,34 @@ void draw_pointer_marks(PLOTTER pl, GC gc)
 
   default:
     /* we are called in motion notify */
+    if (pl->pointer_marks.x > pl->origin.x) {
+      int direction;
+      int font_ascent;
+      int font_descent;
+      XCharStruct xcs;
+      coord x = unmap_coord(pl->x_type, pl_x_left, pl_x_right, pl->size.x,
+			    pl->pointer_marks.x - pl->origin.x);
+      char *xs = unparse_coord(pl->x_type, x);
+      XDrawLine(pl->dpy, pl->win, gc,
+	        pl->pointer_marks.x, pl->origin.y,
+	        pl->pointer_marks.x, pl->origin.y + pl->size.y - 1 + x_pm_l);
+      XTextExtents(pl->font_struct, xs, strlen(xs),
+		   &direction, &font_ascent, &font_descent, &xcs);
+      XDrawString(pl->dpy, pl->win, gc, pl->pointer_marks.x - xcs.width - 1,
+		  pl->origin.y + pl->size.y - 1,
+		  xs, strlen(xs));
+    }
+    if (pl->pointer_marks.y > pl->origin.y && pl->pointer_marks.y < pl->origin.y + pl->size.y) {
+      coord y = unmap_coord(pl->y_type, pl_y_bottom, pl_y_top, pl->size.y,
+		pl->origin.y + pl->size.y - pl->pointer_marks.y - 1);
+      char *ys = unparse_coord(pl->y_type, y);
+      XDrawLine(pl->dpy, pl->win, gc,
+	        pl->origin.x - x_pm_l, pl->pointer_marks.y,
+	        pl->origin.x + pl->size.x - 1, pl->pointer_marks.y);
+      XDrawString(pl->dpy, pl->win, gc, pl->origin.x + x_pm_l, pl->pointer_marks.y - 1,
+		ys, strlen(ys));
+    }
+
     break;
   }
   return;
