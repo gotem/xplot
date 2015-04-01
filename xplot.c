@@ -193,6 +193,8 @@ typedef struct plotter {
   int size_changed;
   int new_expose;
   int clean;
+  int is_hidden[NCOLORS];
+  unsigned int keycode[NCOLORS];
   GC gcs[NCOLORS];
   GC decgc;
   GC xorgc;
@@ -767,7 +769,7 @@ void display_plotter(PLOTTER pl)
   attr.border_pixel     = pl->foreground_color.pixel;
   attr.event_mask       = ButtonReleaseMask|ButtonPressMask|ExposureMask|
     EnterWindowMask|LeaveWindowMask|PointerMotionMask|PointerMotionHintMask|
-    StructureNotifyMask|VisibilityChangeMask;
+    StructureNotifyMask|VisibilityChangeMask|KeyPressMask;
 #if 1
   attr.cursor           = XCreateFontCursor(pl->dpy, XC_crosshair);
 #else
@@ -1002,7 +1004,12 @@ void display_plotter(PLOTTER pl)
 			     &(pl->gcv));
     
       XSetForeground(pl->dpy, pl->gcs[i], d_i[d].Colors[i]);
-
+      pl->is_hidden[i] = 0;
+      if (i < 10) {
+        char buf[3];
+        sprintf(buf, "%i", i);
+        pl->keycode[i] = XKeysymToKeycode(pl->dpy, XStringToKeysym(buf));
+      }
     }
 
     pl->xplot_nagle_atom = d_i[d].xplot_nagle_atom;
@@ -1648,10 +1655,12 @@ int main(int argc, char *argv[])
 		    || c->type == YLABEL)
 		  gc = pl->decgc;
 		else
-		  if ( c->color >= 0 && c->color < NColors)
-		    gc = pl->gcs[c->color];
-		  else
+		  if ( c->color < 0 || c->color >= NColors)
 		    gc = pl->gcs[0];
+                  else if (pl->is_hidden[c->color])
+                    continue;
+                  else
+		    gc = pl->gcs[c->color];
 
 #ifndef WINDOW_COORDS_IN_COMMAND_STRUCT
 		da.x = map_coord(pl->x_type, pl_x_left, pl_x_right, pl->size.x,
@@ -2032,6 +2041,15 @@ int main(int argc, char *argv[])
 	pl->size_changed = 1;
       }
       break;
+    case KeyPress: {
+        int i;
+        for (i=0; i<NCOLORS; ++i)
+          if (event.xkey.keycode == pl->keycode[i]) {
+            pl->is_hidden[i] = !pl->is_hidden[i];
+            pl->size_changed = 1;
+          }
+      }
+      break;
     case ButtonPress:
       if (pl->pointer_marks_on_screen) {
 	draw_pointer_marks(pl, pl->xorgc);
@@ -2089,7 +2107,8 @@ int main(int argc, char *argv[])
 	      if (event.xbutton.state & ShiftMask) {
 		pl->state = THINFIGING;
 	      } else {
-		pl->state = EXITING;
+		// Do not exit on right-click
+		// pl->state = EXITING;
 	      }
 	    }
 	  }
