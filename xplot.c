@@ -194,7 +194,6 @@ typedef struct plotter {
   int new_expose;
   int clean;
   int is_hidden[NCOLORS];
-  unsigned int keycode[NCOLORS];
   GC gcs[NCOLORS];
   GC decgc;
   GC xorgc;
@@ -234,6 +233,8 @@ int option_mono;
 int global_argc;
 char **global_argv;
 
+unsigned int keycode_up, keycode_down, keycode_left, keycode_right;
+unsigned int color_keycode[NCOLORS];
 
 
 command *new_command(struct plotter *pl)
@@ -1005,11 +1006,6 @@ void display_plotter(PLOTTER pl)
     
       XSetForeground(pl->dpy, pl->gcs[i], d_i[d].Colors[i]);
       pl->is_hidden[i] = 0;
-      if (i < 10) {
-        char buf[3];
-        sprintf(buf, "%i", i);
-        pl->keycode[i] = XKeysymToKeycode(pl->dpy, XStringToKeysym(buf));
-      }
     }
 
     pl->xplot_nagle_atom = d_i[d].xplot_nagle_atom;
@@ -1331,6 +1327,46 @@ void draw_pointer_marks(PLOTTER pl, GC gc)
   return;
 }
 
+void do_drag(PLOTTER pl, int x_synch, int y_synch)
+{
+  drag_coord(pl->x_type, pl_x_left, pl_x_right,
+             pl->dragend.x,
+             pl->dragstart.x,
+             pl->size.x,
+             &(pl_x_left), &(pl_x_right));
+  drag_coord(pl->y_type, pl_y_bottom, pl_y_top,
+             pl->size.y - pl->dragend.y,
+             pl->size.y - pl->dragstart.y,
+             pl->size.y,
+             &(pl_y_bottom), &(pl_y_top));
+
+  pl->size_changed = 1;
+  if (x_synch || y_synch) {
+    PLOTTER savepl = pl;
+    for (pl = the_plotter_list; pl != NULL; pl = pl->next) {
+      if (pl == savepl) continue;
+      if (x_synch && savepl->state != VDRAG)
+        {
+          pl_x_left = savepl->x_left[savepl->viewno];
+          pl_x_right = savepl->x_right[savepl->viewno];
+          if (!y_synch) shrink_to_bbox(pl,0,1);
+          pl->size_changed = 1;
+        }
+      if (y_synch && savepl->state != HDRAG)
+        {
+          pl_y_top = savepl->y_top[savepl->viewno];
+          pl_y_bottom = savepl->y_bottom[savepl->viewno];
+          if (!x_synch) shrink_to_bbox(pl,1,0);
+          pl->size_changed = 1;
+        }
+    }
+    pl = savepl;
+  }
+
+  XClearWindow(pl->dpy, pl->win);
+  pl->pointer_marks_on_screen = FALSE;
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -1422,6 +1458,17 @@ int main(int argc, char *argv[])
   if (dpy == 0) {
     dpy = XOpenDisplay("");
     if (dpy == NULL) panic("could not open display");
+  }
+
+  // Load key codes
+  keycode_up = XKeysymToKeycode(dpy, XK_Up);
+  keycode_down = XKeysymToKeycode(dpy, XK_Down);
+  keycode_left = XKeysymToKeycode(dpy, XK_Left);
+  keycode_right = XKeysymToKeycode(dpy, XK_Right);
+  if (i < 10) {
+    char buf[3];
+    sprintf(buf, "%i", i);
+    color_keycode[i] = XKeysymToKeycode(dpy, XStringToKeysym(buf));
   }
 
   {
@@ -2072,8 +2119,36 @@ int main(int argc, char *argv[])
       break;
     case KeyPress: {
         int i;
-        for (i=0; i<NCOLORS; ++i)
-          if (event.xkey.keycode == pl->keycode[i]) {
+        if (event.xkey.keycode == keycode_up) {
+          pl->dragstart.x = pl->origin.x;
+          pl->dragstart.y = pl->origin.y;
+          pl->dragend.x = pl->origin.x;
+          pl->dragend.y = pl->origin.y + pl->size.y / 8;
+          do_drag(pl, x_synch, y_synch);
+        }
+        else if (event.xkey.keycode == keycode_down) {
+          pl->dragstart.x = pl->origin.x;
+          pl->dragstart.y = pl->origin.y + pl->size.y / 8;
+          pl->dragend.x = pl->origin.x;
+          pl->dragend.y = pl->origin.y;
+          do_drag(pl, x_synch, y_synch);
+        }
+        else if (event.xkey.keycode == keycode_left) {
+          pl->dragstart.x = pl->origin.x;
+          pl->dragstart.y = pl->origin.y;
+          pl->dragend.x = pl->origin.x + pl->size.x / 8;
+          pl->dragend.y = pl->origin.y;
+          do_drag(pl, x_synch, y_synch);
+        }
+        else if (event.xkey.keycode == keycode_right) {
+          pl->dragstart.x = pl->origin.x + pl->size.x / 8;
+          pl->dragstart.y = pl->origin.y;
+          pl->dragend.x = pl->origin.x;
+          pl->dragend.y = pl->origin.y;
+          do_drag(pl, x_synch, y_synch);
+        }
+        else for (i=0; i<NCOLORS; ++i)
+          if (event.xkey.keycode == color_keycode[i]) {
             pl->is_hidden[i] = !pl->is_hidden[i];
             pl->size_changed = 1;
           }
@@ -2487,44 +2562,7 @@ int main(int argc, char *argv[])
       case DRAG:
       case HDRAG:
       case VDRAG:
-	{
-	  PLOTTER savepl = pl;
-
-	  drag_coord(pl->x_type, pl_x_left, pl_x_right,
-		     pl->dragend.x,
-		     pl->dragstart.x,
-		     pl->size.x,
-		     &(pl_x_left), &(pl_x_right));
-	  drag_coord(pl->y_type, pl_y_bottom, pl_y_top,
-		     pl->size.y - pl->dragend.y,
-		     pl->size.y - pl->dragstart.y,
-		     pl->size.y,
-		     &(pl_y_bottom), &(pl_y_top));
-	
-	  pl->size_changed = 1;
-	  if (x_synch || y_synch)
-	    for (ALLPLOTTERS)
-	      {
-		if (pl == savepl) continue;
-		if (x_synch && savepl->state != VDRAG)
-		  {
-		    pl_x_left = savepl->x_left[savepl->viewno];
-		    pl_x_right = savepl->x_right[savepl->viewno];
-		    if (!y_synch) shrink_to_bbox(pl,0,1);
-		    pl->size_changed = 1;
-		  }
-		if (y_synch && savepl->state != HDRAG)
-		  {
-		    pl_y_top = savepl->y_top[savepl->viewno];
-		    pl_y_bottom = savepl->y_bottom[savepl->viewno];
-		    if (!x_synch) shrink_to_bbox(pl,1,0);
-		    pl->size_changed = 1;
-		  }
-	      }
-	  pl = savepl;
-	}
-        XClearWindow(pl->dpy, pl->win);
-	pl->pointer_marks_on_screen = FALSE;
+        do_drag(pl, x_synch, y_synch);
         pl->state = NORMAL;
         break;
       case EXITING:
@@ -3815,3 +3853,5 @@ make_name_open_file(struct plotter *pl)
   free(name);
   return fp;
 }
+
+/* vim: set sw=2 ts=8 expandtab smartindent: */
