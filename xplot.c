@@ -2123,12 +2123,12 @@ int main(int argc, char *argv[])
           pl->dragstart.x = pl->origin.x;
           pl->dragstart.y = pl->origin.y;
           pl->dragend.x = pl->origin.x;
-          pl->dragend.y = pl->origin.y + pl->size.y / 8;
+          pl->dragend.y = pl->origin.y + ((event.xkey.state & ShiftMask) ? 1 : pl->size.y / 8);
           do_drag(pl, x_synch, y_synch);
         }
         else if (event.xkey.keycode == keycode_down) {
           pl->dragstart.x = pl->origin.x;
-          pl->dragstart.y = pl->origin.y + pl->size.y / 8;
+          pl->dragstart.y = pl->origin.y + ((event.xkey.state & ShiftMask) ? 1 : pl->size.y / 8);
           pl->dragend.x = pl->origin.x;
           pl->dragend.y = pl->origin.y;
           do_drag(pl, x_synch, y_synch);
@@ -2136,12 +2136,12 @@ int main(int argc, char *argv[])
         else if (event.xkey.keycode == keycode_left) {
           pl->dragstart.x = pl->origin.x;
           pl->dragstart.y = pl->origin.y;
-          pl->dragend.x = pl->origin.x + pl->size.x / 8;
+          pl->dragend.x = pl->origin.x + ((event.xkey.state & ShiftMask) ? 1 : pl->size.x / 8);
           pl->dragend.y = pl->origin.y;
           do_drag(pl, x_synch, y_synch);
         }
         else if (event.xkey.keycode == keycode_right) {
-          pl->dragstart.x = pl->origin.x + pl->size.x / 8;
+          pl->dragstart.x = pl->origin.x + ((event.xkey.state & ShiftMask) ? 1 : pl->size.x / 8);
           pl->dragstart.y = pl->origin.y;
           pl->dragend.x = pl->origin.x;
           pl->dragend.y = pl->origin.y;
