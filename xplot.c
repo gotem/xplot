@@ -1245,6 +1245,10 @@ void shrink_to_bbox(struct plotter *pl, int x, int y)
 void draw_pointer_marks(PLOTTER pl, GC gc)
 {
   const int x_pm_l = 6;
+  int direction;
+  int font_ascent;
+  int font_descent;
+  XCharStruct xcs;
 
 #if 0
   printf("draw_pointer_marks, pl->state is %d\n", pl->state);
@@ -1270,12 +1274,47 @@ void draw_pointer_marks(PLOTTER pl, GC gc)
   switch (pl->state == SLAVE? pl->master_state : pl->state) {
   case ZOOM:
   case HZOOM:
-  case VZOOM:
-    XDrawRectangle(pl->dpy, pl->win, gc,
-		   min(pl->dragstart.x, pl->dragend.x), 
-		   min(pl->dragstart.y, pl->dragend.y),
-		   abs(pl->dragend.x - pl->dragstart.x),
-		   abs(pl->dragend.y - pl->dragstart.y));
+  case VZOOM: {
+      char *text;
+      coord x = unmap_coord(pl->x_type, pl_x_left, pl_x_right, pl->size.x,
+                          pl->pointer_marks.x - pl->origin.x);
+      coord x0 = unmap_coord(pl->x_type, pl_x_left, pl_x_right, pl->size.x,
+                                      pl->dragstart.x - pl->origin.x);
+      coord y = unmap_coord(pl->y_type, pl_y_bottom, pl_y_top, pl->size.y,
+                                    pl->pointer_marks.y - pl->origin.y);
+      coord y0 = unmap_coord(pl->y_type, pl_y_bottom, pl_y_top, pl->size.y,
+                                    pl->dragstart.y - pl->origin.y);
+
+      XDrawRectangle(pl->dpy, pl->win, gc,
+                     min(pl->dragstart.x, pl->dragend.x),
+                     min(pl->dragstart.y, pl->dragend.y),
+                     abs(pl->dragend.x - pl->dragstart.x),
+                     abs(pl->dragend.y - pl->dragstart.y));
+
+      if (pl->dragstart.x < pl->pointer_marks.x)
+        x = impls[pl->x_type]->subtract(x, x0);
+      else
+        x = impls[pl->x_type]->subtract(x0, x);
+      text = unparse_coord(pl->x_type, x);
+      XTextExtents(pl->font_struct, text, strlen(text),
+		   &direction, &font_ascent, &font_descent, &xcs);
+      XDrawString(pl->dpy, pl->win, gc,
+                  pl->dragstart.x + (pl->pointer_marks.x - pl->dragstart.x - xcs.width) / 2,
+                  min(pl->dragstart.y, pl->pointer_marks.y) - xcs.descent,
+                  text, strlen(text));
+
+      if (pl->dragstart.y < pl->pointer_marks.y)
+        y = impls[pl->x_type]->subtract(y, y0);
+      else
+        y = impls[pl->x_type]->subtract(y0, y);
+      text = unparse_coord(pl->y_type, y);
+      XTextExtents(pl->font_struct, text, strlen(text),
+		   &direction, &font_ascent, &font_descent, &xcs);
+      XDrawString(pl->dpy, pl->win, gc,
+                  max(pl->dragstart.x, pl->pointer_marks.x) + 5,
+                  pl->dragstart.y + (pl->pointer_marks.y - pl->dragstart.y) / 2,
+                  text, strlen(text));
+    }
     break;
   case HDRAG:
     XDrawLine(pl->dpy, pl->win, gc,
@@ -1295,10 +1334,6 @@ void draw_pointer_marks(PLOTTER pl, GC gc)
   default:
     /* we are called in motion notify */
     if (pl->pointer_marks.x > pl->origin.x) {
-      int direction;
-      int font_ascent;
-      int font_descent;
-      XCharStruct xcs;
       coord x = unmap_coord(pl->x_type, pl_x_left, pl_x_right, pl->size.x,
 			    pl->pointer_marks.x - pl->origin.x);
       char *xs = unparse_coord(pl->x_type, x);
